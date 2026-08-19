@@ -1,2 +1,5 @@
 dist
 node_modules
+
+# Local reference copies of third-party docs — not for publication
+reference/

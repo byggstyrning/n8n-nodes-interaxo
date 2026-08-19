@@ -1,0 +1,18 @@
+{
+	"node": "n8n-nodes-interaxo",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Data & Storage", "Productivity"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://github.com/byggstyrning/n8n-nodes-interaxo?tab=readme-ov-file#credentials"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://github.com/byggstyrning/n8n-nodes-interaxo?tab=readme-ov-file"
+			}
+		]
+	}
+}
