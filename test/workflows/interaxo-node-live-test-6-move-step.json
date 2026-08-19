@@ -1,0 +1,228 @@
+{
+  "name": "Interaxo node live test 6 (move step, self-cleaning)",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "fieldschema",
+      "name": "Field Schema",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        180,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "entry",
+        "operation": "getFields",
+        "folderId": "REPLACE-WITH-A-WORKFLOW-FOLDER-ID"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "createentry",
+      "name": "Create Entry",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        360,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "entry",
+        "operation": "create",
+        "folderId": "REPLACE-WITH-A-WORKFLOW-FOLDER-ID",
+        "fieldsJson": "[{\"name\": \"NAMN\", \"value\": \"N8N-NODE-STEP-TEST\"}, {\"name\": \"BESKRIVNING\", \"value\": \"Temporary entry for step-transition test - safe to delete\"}, {\"name\": \"05.DOKUMENTTYP\", \"value\": \"Modell\"}, {\"name\": \"STATUS\", \"value\": \"Preliminär\"}, {\"name\": \"REV. BETECKNING\", \"value\": \"-\"}, {\"name\": \"DATUM\", \"value\": \"2026-08-19\"}]",
+        "sanitize": true
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "movetosecondstep",
+      "name": "Move To Second Step",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        540,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "entry",
+        "operation": "moveStep",
+        "entryId": "={{ $json.id }}",
+        "stepId": "={{ $('Field Schema').item.json.steps[1].id }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "verifystep",
+      "name": "Verify Step",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "content",
+        "operation": "get",
+        "contentId": "={{ $('Create Entry').item.json.id }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "deleteentry",
+      "name": "Delete Entry",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        900,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "content",
+        "operation": "delete",
+        "contentId": "={{ $('Create Entry').item.json.id }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      },
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Field Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Field Schema": {
+      "main": [
+        [
+          {
+            "node": "Create Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Entry": {
+      "main": [
+        [
+          {
+            "node": "Move To Second Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move To Second Step": {
+      "main": [
+        [
+          {
+            "node": "Verify Step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Step": {
+      "main": [
+        [
+          {
+            "node": "Delete Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

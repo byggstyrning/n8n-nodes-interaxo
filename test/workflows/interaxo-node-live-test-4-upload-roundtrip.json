@@ -1,0 +1,405 @@
+{
+  "name": "Interaxo node live test 4 (upload roundtrip, self-cleaning)",
+  "nodes": [
+    {
+      "id": "trig",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "resolveidsfolder",
+      "name": "Resolve Target Folder",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        180,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "content",
+        "operation": "resolveFolder",
+        "contentId": "REPLACE-WITH-AN-ENTRY-ID"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "fieldschema",
+      "name": "Field Schema",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        360,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "entry",
+        "operation": "getFields",
+        "folderId": "={{ $json.id }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "createentry",
+      "name": "Create Entry",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        540,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "entry",
+        "operation": "create",
+        "folderId": "={{ $('Resolve Target Folder').item.json.id }}",
+        "fieldsJson": "[{\"name\": \"NAMN\", \"value\": \"N8N-NODE-UPLOAD-TEST\"}, {\"name\": \"BESKRIVNING\", \"value\": \"Temporary entry from n8n-nodes-interaxo upload test - safe to delete\"}, {\"name\": \"04.DISCIPLIN\", \"value\": \"A\"}, {\"name\": \"05.DOKUMENTTYP\", \"value\": \"Övriga dokument\"}, {\"name\": \"STATUS\", \"value\": \"Preliminär\"}, {\"name\": \"REV. BETECKNING\", \"value\": \"-\"}, {\"name\": \"DATUM\", \"value\": \"2026-08-19\"}]",
+        "sanitize": true
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "mk1",
+      "name": "Make File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const entryId = $input.first().json.entryId ?? $input.first().json.id;\nconst content = 'n8n-nodes-interaxo upload test — run ' + $execution.id + ' round ' + ($input.first().json.round ?? 1);\nconst binary = await this.helpers.prepareBinaryData(Buffer.from(content, 'utf8'), 'n8n-node-upload-test.txt', 'text/plain');\nreturn [{ json: { entryId }, binary: { data: binary } }];"
+      }
+    },
+    {
+      "id": "upload1",
+      "name": "Upload 1",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        900,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "file",
+        "operation": "upload",
+        "entryId": "={{ $json.entryId }}",
+        "binaryPropertyName": "data",
+        "fileName": ""
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "mk2",
+      "name": "Make File 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const entryId = $input.first().json.entryId ?? $('Make File').first().json.entryId;\nconst content = 'n8n-nodes-interaxo upload test — run ' + $execution.id + ' round ' + ($input.first().json.round ?? 2);\nconst binary = await this.helpers.prepareBinaryData(Buffer.from(content, 'utf8'), 'n8n-node-upload-test.txt', 'text/plain');\nreturn [{ json: { entryId }, binary: { data: binary } }];"
+      }
+    },
+    {
+      "id": "upload2",
+      "name": "Upload 2",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        1260,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "file",
+        "operation": "upload",
+        "entryId": "={{ $('Make File').first().json.entryId }}",
+        "binaryPropertyName": "data",
+        "fileName": ""
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "getversions",
+      "name": "Get Versions",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "file",
+        "operation": "getVersions",
+        "fileId": "={{ $('Upload 2').item.json.targetFileId }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "deletefile",
+      "name": "Delete File",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        1620,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "content",
+        "operation": "delete",
+        "contentId": "={{ $('Upload 2').item.json.targetFileId }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "deleteentry",
+      "name": "Delete Entry",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        1800,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "content",
+        "operation": "delete",
+        "contentId": "={{ $('Make File').first().json.entryId }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      },
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Resolve Target Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Target Folder": {
+      "main": [
+        [
+          {
+            "node": "Field Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Field Schema": {
+      "main": [
+        [
+          {
+            "node": "Create Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Entry": {
+      "main": [
+        [
+          {
+            "node": "Make File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make File": {
+      "main": [
+        [
+          {
+            "node": "Upload 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload 1": {
+      "main": [
+        [
+          {
+            "node": "Make File 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make File 2": {
+      "main": [
+        [
+          {
+            "node": "Upload 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload 2": {
+      "main": [
+        [
+          {
+            "node": "Get Versions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Versions": {
+      "main": [
+        [
+          {
+            "node": "Delete File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete File": {
+      "main": [
+        [
+          {
+            "node": "Delete Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

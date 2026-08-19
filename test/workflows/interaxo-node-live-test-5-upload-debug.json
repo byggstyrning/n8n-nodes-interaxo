@@ -1,0 +1,295 @@
+{
+  "name": "Interaxo node live test 5 (upload debug)",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "createentry",
+      "name": "Create Entry",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        180,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "entry",
+        "operation": "create",
+        "folderId": "REPLACE-WITH-A-WORKFLOW-FOLDER-ID",
+        "fieldsJson": "[{\"name\": \"NAMN\", \"value\": \"N8N-NODE-DEBUG-TEST\"}, {\"name\": \"BESKRIVNING\", \"value\": \"Temporary - safe to delete\"}, {\"name\": \"04.DISCIPLIN\", \"value\": \"A\"}, {\"name\": \"05.DOKUMENTTYP\", \"value\": \"Övriga dokument\"}, {\"name\": \"STATUS\", \"value\": \"Preliminär\"}, {\"name\": \"REV. BETECKNING\", \"value\": \"-\"}, {\"name\": \"DATUM\", \"value\": \"2026-08-19\"}]",
+        "sanitize": true
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "mk",
+      "name": "Make File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const entryId = $input.first().json.id;\nconst binary = await this.helpers.prepareBinaryData(Buffer.from('debug', 'utf8'), 'debug-test.txt', 'text/plain');\nreturn [{ json: { entryId }, binary: { data: binary } }];"
+      }
+    },
+    {
+      "id": "upload",
+      "name": "Upload",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        540,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "file",
+        "operation": "upload",
+        "entryId": "={{ $json.entryId }}",
+        "binaryPropertyName": "data",
+        "fileName": ""
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "listchildren",
+      "name": "List Children",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "content",
+        "operation": "listChildren",
+        "contentId": "={{ $('Make File').first().json.entryId }}",
+        "returnAll": true
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "getbyuploadid",
+      "name": "Get By Upload Id",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        900,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "content",
+        "operation": "get",
+        "contentId": "={{ $('Upload').item.json.targetFileId }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "deletefile",
+      "name": "Delete File",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "content",
+        "operation": "delete",
+        "contentId": "={{ $('Upload').item.json.targetFileId }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "deleteentry",
+      "name": "Delete Entry",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        1260,
+        0
+      ],
+      "parameters": {
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "resource": "content",
+        "operation": "delete",
+        "contentId": "={{ $('Make File').first().json.entryId }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Entry": {
+      "main": [
+        [
+          {
+            "node": "Make File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make File": {
+      "main": [
+        [
+          {
+            "node": "Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload": {
+      "main": [
+        [
+          {
+            "node": "List Children",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Children": {
+      "main": [
+        [
+          {
+            "node": "Get By Upload Id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get By Upload Id": {
+      "main": [
+        [
+          {
+            "node": "Delete File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete File": {
+      "main": [
+        [
+          {
+            "node": "Delete Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

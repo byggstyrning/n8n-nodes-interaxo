@@ -1,0 +1,130 @@
+{
+  "name": "Interaxo node live test (read-only)",
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n2",
+      "name": "Communities",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "resource": "community",
+        "operation": "getAll"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "name": "Rooms",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "resource": "room",
+        "operation": "getAll",
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        }
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Search Files",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "resource": "content",
+        "operation": "search",
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "folderId": "",
+        "typeFilter": "file",
+        "nameFilter": "*.pdf",
+        "stepNameFilter": "",
+        "returnAll": false,
+        "limit": 5
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Communities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Communities": {
+      "main": [
+        [
+          {
+            "node": "Rooms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rooms": {
+      "main": [
+        [
+          {
+            "node": "Search Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

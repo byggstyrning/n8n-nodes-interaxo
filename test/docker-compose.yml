@@ -1,0 +1,28 @@
+# Isolated n8n instance for testing the Interaxo custom node.
+# Pinned to the same n8n version as the production instance; runs on its own
+# port and data dir and never touches the production container.
+#
+#   docker compose -f test/docker-compose.yml up -d
+#   → http://localhost:5679
+#
+# The built dist/ is mounted as a custom extension; rebuild the package and
+# restart the container to pick up changes.
+services:
+  n8n-test:
+    image: docker.n8n.io/n8nio/n8n:2.8.3
+    container_name: n8n-interaxo-test
+    user: "1000:1000"
+    ports:
+      - "5679:5678"
+    volumes:
+      - ./n8n-test-data:/home/node/.n8n
+      - ../dist:/home/node/.n8n/custom/n8n-nodes-interaxo:ro
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - N8N_SECURE_COOKIE=false
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_PERSONALIZATION_ENABLED=false
+    restart: unless-stopped

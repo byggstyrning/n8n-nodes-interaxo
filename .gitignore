@@ -1,0 +1,17 @@
+dist
+node_modules
+
+# Local reference copies of third-party docs — not for publication
+reference/
+
+# test instance state
+test/n8n-test-data/
+test/.env
+
+# editor swap/backup files
+*.swp
+*.swo
+*~
+
+# private working notes — never published
+local-notes/

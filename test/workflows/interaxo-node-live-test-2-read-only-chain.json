@@ -1,0 +1,217 @@
+{
+  "name": "Interaxo node live test 2 (read-only chain)",
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n2",
+      "name": "Search One File",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "resource": "content",
+        "operation": "search",
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "folderId": "",
+        "typeFilter": "file",
+        "nameFilter": "*.pdf",
+        "stepNameFilter": "",
+        "returnAll": false,
+        "limit": 1
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "name": "Get Item",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -150
+      ],
+      "parameters": {
+        "resource": "content",
+        "operation": "get",
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "contentId": "={{ $json.id }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Get Versions",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "getVersions",
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "fileId": "={{ $json.id }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "n5",
+      "name": "Resolve Folder",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        400,
+        150
+      ],
+      "parameters": {
+        "resource": "content",
+        "operation": "resolveFolder",
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "contentId": "={{ $json.id }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "n6",
+      "name": "Field Schema",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        600,
+        150
+      ],
+      "parameters": {
+        "resource": "entry",
+        "operation": "getFields",
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "folderId": "={{ $json.id }}"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Search One File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search One File": {
+      "main": [
+        [
+          {
+            "node": "Get Item",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Versions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resolve Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Folder": {
+      "main": [
+        [
+          {
+            "node": "Field Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

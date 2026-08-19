@@ -1,0 +1,162 @@
+{
+  "name": "Interaxo node live test 3 (download smallest pdf)",
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n2",
+      "name": "Search Small Files",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        200,
+        0
+      ],
+      "parameters": {
+        "resource": "content",
+        "operation": "search",
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "folderId": "",
+        "typeFilter": "file",
+        "nameFilter": "*.pdf",
+        "stepNameFilter": "",
+        "returnAll": false,
+        "limit": 20
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "name": "Sort by Size",
+      "type": "n8n-nodes-base.sort",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "parameters": {
+        "sortFieldsUi": {
+          "sortField": [
+            {
+              "fieldName": "file_size",
+              "order": "ascending"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Take Smallest",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        600,
+        0
+      ],
+      "parameters": {
+        "maxItems": 1
+      }
+    },
+    {
+      "id": "n5",
+      "name": "Download",
+      "type": "CUSTOM.interaxo",
+      "typeVersion": 1,
+      "position": [
+        800,
+        0
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "download",
+        "community": {
+          "__rl": true,
+          "mode": "id",
+          "value": "your-community"
+        },
+        "room": {
+          "__rl": true,
+          "mode": "slug",
+          "value": "your-room-slug"
+        },
+        "fileId": "={{ $json.id }}",
+        "outputBinaryPropertyName": "data"
+      },
+      "credentials": {
+        "interaxoApi": {
+          "name": "Interaxo (live test)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Search Small Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Small Files": {
+      "main": [
+        [
+          {
+            "node": "Sort by Size",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort by Size": {
+      "main": [
+        [
+          {
+            "node": "Take Smallest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Take Smallest": {
+      "main": [
+        [
+          {
+            "node": "Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}
