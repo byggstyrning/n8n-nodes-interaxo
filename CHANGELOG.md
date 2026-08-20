@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- First release published via GitHub Actions with npm provenance (OIDC Trusted Publishing); no functional changes
+
 ## 0.1.0
 
 Initial release.
