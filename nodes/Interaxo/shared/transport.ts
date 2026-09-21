@@ -9,6 +9,7 @@ import type {
 	JsonObject,
 } from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
+import { randomBytes } from 'crypto';
 
 export type InteraxoContext =
 	| IExecuteFunctions
@@ -167,12 +168,30 @@ export async function resolvePostableFolder(
 	return undefined;
 }
 
-// Node 18+ ships WHATWG FormData/Blob globally (undici); the tsconfig lib set
-// predates them, so declare the minimal surface we use.
-declare const FormData: {
-	new (): { append(name: string, value: unknown, fileName?: string): void };
-};
-declare const Blob: { new (parts: unknown[], options?: { type?: string }): unknown };
+// RFC 7578 header/footer around the file bytes. A single Buffer body is sent as-is
+// by n8n's request helper and axios: measured peak ~2.3x the file above baseline
+// (the caller's buffer, this body, socket write buffers) and nothing retained
+// afterwards. The earlier WHATWG Blob + FormData version peaked at ~3.3x and, on
+// Node < 24.20, leaked one full copy of every upload until restart
+// (nodejs/node#63574, Blob.prototype.stream()). Built by hand because the
+// community-node lint forbids importing form-data or stream.
+function multipartFile(buffer: Buffer, fileName: string, mimeType?: string) {
+	const boundary = `----n8nInteraxo${randomBytes(16).toString('hex')}`;
+	// Same escaping as the form-data package: quotes and line breaks in the name
+	// would otherwise terminate the header.
+	const safeName = fileName.replace(/"/g, '%22').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+	const head = Buffer.from(
+		`--${boundary}\r\n` +
+			`Content-Disposition: form-data; name="file"; filename="${safeName}"\r\n` +
+			`Content-Type: ${mimeType || 'application/octet-stream'}\r\n\r\n`,
+		'utf8',
+	);
+	const tail = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+	return {
+		body: Buffer.concat([head, buffer, tail]),
+		contentType: `multipart/form-data; boundary=${boundary}`,
+	};
+}
 
 /**
  * Multipart upload; used both for new attachments (POST .../content/{entry}/children)
@@ -185,14 +204,13 @@ export async function interaxoUploadFile(
 	fileName: string,
 	mimeType?: string,
 ): Promise<IDataObject> {
-	const form = new FormData();
-	form.append('file', new Blob([buffer], mimeType ? { type: mimeType } : undefined), fileName);
+	const { body, contentType } = multipartFile(buffer, fileName, mimeType);
 
 	const response = await interaxoRequest.call(this, 'POST', path, {
-		body: form,
+		body,
 		option: {
 			json: false,
-			headers: { Accept: 'application/json' },
+			headers: { Accept: 'application/json', 'Content-Type': contentType },
 			timeout: 300_000,
 		},
 	});

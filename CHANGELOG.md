@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2
+
+- **File → Upload: fix memory leak and lower peak RAM** (#9). The multipart body is now
+  built as a plain Buffer instead of WHATWG `Blob` + `FormData`. On Node < 24.20 the
+  old path leaked one full copy of every uploaded file until the n8n process restarted
+  (nodejs/node#63574, `Blob.prototype.stream()`), and it peaked at ~3.3x the file size;
+  the new path retains nothing and peaks at ~2.3x. Wire format unchanged (field `file`,
+  filename and Content-Type as before); no new dependencies.
+
 ## 0.1.1
 
 - First release published via GitHub Actions with npm provenance (OIDC Trusted Publishing); no functional changes
