@@ -63,8 +63,18 @@ Tree nodes are heterogeneous; traversal must branch on `type`:
 - **Pagination:** `limit` + `skip`, responses are bare arrays with no total count. Stop when
   a page is shorter than `limit`. Page sizes up to 500 work fine.
 - **404 from `/search`** below an empty folder means "no results", not an error **(observed)**.
-- **Room addressing is ambiguous** — the API accepts both the room slug and the content-root
-  UUID in the `{room}` position **(observed)**.
+- **Room addressing is ambiguous** — content paths (`/rooms/{room}/content/...`) accept both the
+  room slug and the content-root UUID in the `{room}` position, but `GET /rooms/{room}` itself
+  404s for the UUID; resolve it via `GET /rooms` (match `id`, `content.root_id` or `name`)
+  **(observed)**.
+- **`name=` on `/search` is loose** — case-insensitive and prefix-like, and fuzzier still for
+  file names: `PRJ-002-X_Part.ifc` also returned `PRJ-005-X_Part.ifc`. `*` globs work.
+  Always re-check names client-side **(observed)**.
+- **`/search?type=file` below a workflow folder** returns exactly the files reachable by walking
+  entries and listing their attachments (verified on 42 files / 32 entries), in one paged
+  request. `type=entry` results include `step` and `fields`.
+- **Paths include the workflow step**: an entry's `path` is
+  `/…/<workflow folder>/<step name>/<entry>`, its files `…/<entry>/<file>` **(observed)**.
 - **Upload semantics:** to attach a file, list the entry's children and match the file name
   case-insensitively — a match means POST a new *version*, otherwise POST a new *attachment*.
 - **Search results and postable folders:** search returns files whose parent is an entry;
