@@ -1,6 +1,7 @@
 import type { IDataObject, IExecuteFunctions, INodeProperties } from 'n8n-workflow';
 import { communitySelect, roomSelect } from '../../shared/descriptions';
-import { getRlc, interaxoRequest, roomPath } from '../../shared/transport';
+import { getRoom } from '../../shared/find';
+import { getRlc, interaxoRequest } from '../../shared/transport';
 
 const showOnlyForRooms = {
 	resource: ['room'],
@@ -60,7 +61,7 @@ export async function roomGetAll(this: IExecuteFunctions, i: number): Promise<ID
 export async function roomGet(this: IExecuteFunctions, i: number): Promise<IDataObject> {
 	const community = getRlc(this, 'community', i);
 	const room = getRlc(this, 'room', i);
-	return (await interaxoRequest.call(this, 'GET', roomPath(community, room))) as IDataObject;
+	return await getRoom.call(this, community, room);
 }
 
 export const roomHandlers = {

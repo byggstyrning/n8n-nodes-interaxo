@@ -8,6 +8,7 @@ import {
 	resolvePostableFolder,
 	roomPath,
 } from '../../shared/transport';
+import { getRoomRootId, nameMatcher, resolvePath } from '../../shared/find';
 
 const showOnlyForContent = {
 	resource: ['content'],
@@ -34,6 +35,13 @@ export const contentDescription: INodeProperties[] = [
 				value: 'get',
 				action: 'Get a content item',
 				description: 'Retrieve a single content item of any type',
+			},
+			{
+				name: 'Get by Path',
+				value: 'getByPath',
+				action: 'Get a content item by path',
+				description:
+					'Resolve a path of display names (e.g. /Design/Architecture/In Progress/A-40-V-0001/A-40-V-0001.pdf) to the item it points at',
 			},
 			{
 				name: 'List Children',
@@ -85,6 +93,36 @@ export const contentDescription: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Path',
+		name: 'path',
+		type: 'string',
+		default: '',
+		required: true,
+		placeholder: 'e.g. /Design/Architecture/In Progress/A-40-V-0001',
+		description:
+			'Slash-separated display names, as in an item\'s path property. Below a workflow folder a segment may name a workflow step; entries are matched exactly, never by prefix.',
+		displayOptions: {
+			show: {
+				...showOnlyForContent,
+				operation: ['getByPath'],
+			},
+		},
+	},
+	{
+		displayName: 'Start Folder ID',
+		name: 'startFolderId',
+		type: 'string',
+		default: '',
+		placeholder: 'e.g. 9f0c1e2d-3b4a-4c6d-8e8f-901a2b3c4d5e',
+		description: 'Resolve the path relative to this folder. Leave empty to start at the room root.',
+		displayOptions: {
+			show: {
+				...showOnlyForContent,
+				operation: ['getByPath'],
+			},
+		},
+	},
+	{
 		displayName: 'Simplify',
 		name: 'simplify',
 		type: 'boolean',
@@ -93,7 +131,7 @@ export const contentDescription: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				...showOnlyForContent,
-				operation: ['get', 'listChildren', 'search'],
+				operation: ['get', 'getByPath', 'listChildren', 'search'],
 			},
 		},
 	},
@@ -140,7 +178,8 @@ export const contentDescription: INodeProperties[] = [
 		type: 'string',
 		default: '',
 		placeholder: 'e.g. *.ifc',
-		description: 'Exact name or glob pattern to match',
+		description:
+			'Exact name or glob pattern (* and ?), case-insensitive. Matched exactly: A-40-V-0001 does not also return A-40-V-0001_Part2 (the API itself matches by prefix).',
 		displayOptions: {
 			show: {
 				...showOnlyForContent,
@@ -208,18 +247,7 @@ async function resolveSearchRoot(
 	room: string,
 	folderId: string,
 ): Promise<string> {
-	if (folderId) return folderId;
-	const roomInfo = (await interaxoRequest.call(ctx, 'GET', roomPath(community, room))) as {
-		content?: { root_id?: string };
-	};
-	const rootId = roomInfo.content?.root_id;
-	if (!rootId) {
-		throw new NodeOperationError(
-			ctx.getNode(),
-			`Could not resolve content root for room "${room}" — pass a Folder ID explicitly`,
-		);
-	}
-	return rootId;
+	return folderId || (await getRoomRootId.call(ctx, community, room));
 }
 
 export async function contentGet(this: IExecuteFunctions, i: number): Promise<IDataObject> {
@@ -232,6 +260,18 @@ export async function contentGet(this: IExecuteFunctions, i: number): Promise<ID
 		`${roomPath(community, room)}/content/${encodeURIComponent(contentId)}`,
 	)) as IDataObject;
 	return maybeSimplify(this, i, [item])[0];
+}
+
+export async function contentGetByPath(this: IExecuteFunctions, i: number): Promise<IDataObject> {
+	const community = getRlc(this, 'community', i);
+	const room = getRlc(this, 'room', i);
+	const path = this.getNodeParameter('path', i) as string;
+	const startFolderId = this.getNodeParameter('startFolderId', i, '') as string;
+
+	const { item, step } = await resolvePath.call(this, community, room, path, startFolderId);
+	const result = maybeSimplify(this, i, [item])[0];
+	// a path ending in a workflow step resolves to the folder; say which step
+	return step ? { ...result, resolved_step: { id: step.id, name: step.name } } : result;
 }
 
 export async function contentDelete(this: IExecuteFunctions, i: number): Promise<IDataObject> {
@@ -280,20 +320,24 @@ export async function contentSearch(this: IExecuteFunctions, i: number): Promise
 	if (typeFilter) qs.type = typeFilter;
 	if (nameFilter) qs.name = nameFilter;
 
+	// the API's name= is a case-insensitive prefix match, so names are re-checked
+	// client-side; like step filtering, that means the page loop can't be capped
+	const matchName = nameMatcher(nameFilter);
+	const filterClientSide = !!stepNameFilter || !!nameFilter;
 	let results = await interaxoRequestPaged.call(
 		this,
 		`${roomPath(community, room)}/content/${encodeURIComponent(rootId)}/search`,
-		// step filtering happens client-side, so only cap the page loop when unfiltered
-		{ qs, maxItems: stepNameFilter ? undefined : maxItems, treat404AsEmpty: true },
+		{ qs, maxItems: filterClientSide ? undefined : maxItems, treat404AsEmpty: true },
 	);
+	if (nameFilter) results = results.filter((item) => matchName(item.name));
 
 	if (stepNameFilter) {
 		const needle = stepNameFilter.toLowerCase();
 		results = results.filter(
 			(item) => ((item.step as IDataObject)?.name as string)?.toLowerCase() === needle,
 		);
-		if (maxItems !== undefined) results = results.slice(0, maxItems);
 	}
+	if (filterClientSide && maxItems !== undefined) results = results.slice(0, maxItems);
 
 	return maybeSimplify(this, i, results);
 }
@@ -320,6 +364,7 @@ export async function contentResolveFolder(
 export const contentHandlers = {
 	delete: contentDelete,
 	get: contentGet,
+	getByPath: contentGetByPath,
 	listChildren: contentListChildren,
 	resolveFolder: contentResolveFolder,
 	search: contentSearch,

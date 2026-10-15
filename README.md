@@ -31,13 +31,15 @@ in the n8n community nodes documentation. The package name is `n8n-nodes-interax
 | Room | Get | Includes `content.root_id`, the entry point of the room's content tree |
 | Room | Get Many | |
 | Content | Get | Any content item (folder, entry, file) by ID |
+| Content | Get by Path | Resolve a path of display names (`/Folder/Workflow folder/Step/Entry/file.pdf`) to the item; a segment below a workflow folder may name a workflow step |
 | Content | List Children | Direct children, paginated |
-| Content | Search | Recursive search below a folder — name glob (`*.ifc`), type filter, workflow-step filter, Return All |
+| Content | Search | Recursive search below a folder — exact name or glob (`*.ifc`), type filter, workflow-step filter, Return All |
 | Content | Resolve Parent Folder | Walks parent IDs up to the nearest active-folder / workflow-folder (the only types entries can be created in) |
 | Content | Delete | Entries and files; deleting an entry removes its attachments |
 | Entry | Create | Schema-aware: resolves field IDs from the folder schema by display name, validates mandatory fields client-side, wraps list values correctly |
 | Entry | Get Field Schema | Field definitions and workflow steps of a folder |
 | Entry | Move to Step | Move an entry between workflow steps |
+| File | Find | Files below a folder, path, workflow step or entry by exact name or glob; filters for workflow step, entry name and modification time; adds the parent entry (name, step, optionally its field values); one item per file or a single `{found, count, files}` summary |
 | File | Upload | Create-or-version: same file name on the entry ⇒ new version, otherwise new attachment |
 | File | Download | Streams via the file's pre-signed content URL into binary data |
 | File | Get Versions | Version history including uploader identities |
@@ -77,6 +79,13 @@ A few Interaxo behaviors worth knowing:
   existing attachments decides between "new version" and "new attachment".
 - **Search:** a 404 from a search below an empty folder is returned as an empty result, not
   an error.
+- **Name matching:** the API's own `name` filter is loose (prefix-like and fuzzier than that —
+  `A-40-V-0001` also returns `A-40-V-0001_Part2`). Content → Search and File → Find re-check
+  every result client-side, so a name without wildcards matches exactly (case-insensitive).
+- **Rooms by root ID:** a room can be given as its content-root UUID everywhere; where the API
+  only accepts the slug (`GET /rooms/{room}`), the node resolves it from the room list.
+- **Paths:** item `path` values include the workflow step of entries
+  (`/…/Workflow folder/Step/Entry/file`), and Get by Path / File → Find accept the same shape.
 
 ## Resources
 
