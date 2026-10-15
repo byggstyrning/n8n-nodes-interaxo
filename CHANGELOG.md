@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3
 
 - **File → Find** (new): find files below a folder, a path, a workflow step or an entry by
   exact name or glob. Optional filters: workflow step, entry name (exact or glob), modified
