@@ -70,6 +70,9 @@ export async function interaxoRequest(
 		// hide Interaxo's error body ({code, message, trace_id, field errors}) —
 		// dig it out of the wrapped axios error and surface it
 		let body: IDataObject | undefined;
+		// NodeApiError keeps the parsed response body in context.data
+		const contextData = (error as { context?: { data?: unknown } }).context?.data;
+		if (contextData && typeof contextData === 'object') body = contextData as IDataObject;
 		let cursor = error as
 			| { response?: { body?: unknown; data?: unknown }; cause?: unknown }
 			| undefined;
@@ -80,11 +83,24 @@ export async function interaxoRequest(
 		}
 		if (body && typeof body === 'object' && (body.message || body.code || body.errors)) {
 			const detail = [body.code, body.message].filter(Boolean).join(': ');
-			const fieldErrors = body.errors ? ` — ${JSON.stringify(body.errors)}` : '';
-			throw new NodeApiError(this.getNode(), error as JsonObject, {
-				message: `${detail || 'Interaxo API error'}${fieldErrors}`,
+			const errors = Array.isArray(body.errors) ? (body.errors as IDataObject[]) : [];
+			const fieldErrors = errors.length
+				? ` — ${errors.map((e) => [e.code, e.message].filter(Boolean).join(': ')).join('; ')}`
+				: body.errors
+					? ` — ${JSON.stringify(body.errors)}`
+					: '';
+			const status = errorStatus(error);
+			const message = `${detail || 'Interaxo API error'}${fieldErrors}`;
+			const apiError = new NodeApiError(this.getNode(), error as JsonObject, {
+				message,
 				description: `${method} ${path}`,
+				// keep the status: callers branch on 404
+				...(status !== undefined ? { httpCode: String(status) } : {}),
 			});
+			// NodeApiError swaps in a generic text ("Bad request - please check your
+			// parameters") for known status codes; Interaxo's own message is the useful one
+			apiError.message = message;
+			throw apiError;
 		}
 		throw error instanceof NodeApiError
 			? error

@@ -57,9 +57,9 @@ export const fileDescription: INodeProperties[] = [
 			{
 				name: 'Upload',
 				value: 'upload',
-				action: 'Upload a file to an entry',
+				action: 'Upload a file',
 				description:
-					'Upload binary data to an entry — becomes a new version if a file with the same name already exists, otherwise a new attachment',
+					'Upload binary data to an entry (new version when a file with the same name exists, otherwise a new attachment) or as a new version of a given file',
 			},
 		],
 		default: 'upload',
@@ -77,6 +77,31 @@ export const fileDescription: INodeProperties[] = [
 		},
 	},
 	{
+		displayName: 'Upload To',
+		name: 'uploadTo',
+		type: 'options',
+		default: 'entry',
+		options: [
+			{
+				name: 'Entry',
+				value: 'entry',
+				description:
+					'Attach to an entry: a file with the same name (case-insensitive) gets a new version, otherwise see "If No File With That Name"',
+			},
+			{
+				name: 'Existing File (New Version)',
+				value: 'file',
+				description: 'Upload as a new version of the file with the given ID',
+			},
+		],
+		displayOptions: {
+			show: {
+				...showOnlyForFiles,
+				operation: ['upload'],
+			},
+		},
+	},
+	{
 		displayName: 'Entry ID',
 		name: 'entryId',
 		type: 'string',
@@ -88,6 +113,53 @@ export const fileDescription: INodeProperties[] = [
 			show: {
 				...showOnlyForFiles,
 				operation: ['upload'],
+				uploadTo: ['entry'],
+			},
+		},
+	},
+	{
+		displayName: 'File ID',
+		name: 'uploadFileId',
+		type: 'string',
+		default: '',
+		required: true,
+		placeholder: 'e.g. 9f0c1e2d-3b4a-4c6d-8e8f-901a2b3c4d5e',
+		description: 'UUID of the file to add a new version to',
+		displayOptions: {
+			show: {
+				...showOnlyForFiles,
+				operation: ['upload'],
+				uploadTo: ['file'],
+			},
+		},
+	},
+	{
+		displayName: 'If No File With That Name',
+		name: 'ifNoMatch',
+		type: 'options',
+		default: 'create',
+		options: [
+			{
+				name: 'Add as New Attachment',
+				value: 'create',
+			},
+			{
+				name: 'Skip',
+				value: 'skip',
+				description:
+					'Upload nothing and output {uploadMode: "skipped", existingFiles} — for flows that may only update files that already exist',
+			},
+			{
+				name: 'Error',
+				value: 'error',
+				description: 'Fail the item (or output the error with Continue On Fail)',
+			},
+		],
+		displayOptions: {
+			show: {
+				...showOnlyForFiles,
+				operation: ['upload'],
+				uploadTo: ['entry'],
 			},
 		},
 	},
@@ -335,6 +407,7 @@ export async function fileFind(
 				id: location.id,
 				type: location.type,
 				path: location.path,
+				parent_id: location.parent_id,
 				step: location.step ? { id: location.step.id, name: location.step.name } : null,
 			},
 		};
@@ -345,31 +418,63 @@ export async function fileFind(
 export async function fileUpload(this: IExecuteFunctions, i: number): Promise<IDataObject> {
 	const community = getRlc(this, 'community', i);
 	const room = getRlc(this, 'room', i);
-	const entryId = this.getNodeParameter('entryId', i) as string;
+	const uploadTo = this.getNodeParameter('uploadTo', i, 'entry') as string;
 	const binaryPropertyName = this.getNodeParameter('binaryPropertyName', i) as string;
 
 	const binaryData = this.helpers.assertBinaryData(i, binaryPropertyName);
-	const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
 	const fileName =
 		(this.getNodeParameter('fileName', i, '') as string) || binaryData.fileName || 'file';
+	const base = roomPath(community, room);
+
+	if (uploadTo === 'file') {
+		const fileId = this.getNodeParameter('uploadFileId', i) as string;
+		const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+		const response = await interaxoUploadFile.call(
+			this,
+			`${base}/files/${encodeURIComponent(fileId)}/versions`,
+			buffer,
+			fileName,
+			binaryData.mimeType,
+		);
+		return {
+			...response,
+			uploadMode: 'newVersion',
+			targetFileId: (response.id as string | undefined) ?? fileId,
+		};
+	}
+
+	const entryId = this.getNodeParameter('entryId', i) as string;
+	const ifNoMatch = this.getNodeParameter('ifNoMatch', i, 'create') as string;
 
 	// The universal production pattern: same basename (case-insensitive) among the
 	// entry's attachments → new version; otherwise → new attachment.
 	const children = await interaxoRequestPaged.call(
 		this,
-		`${roomPath(community, room)}/content/${encodeURIComponent(entryId)}/children`,
+		`${base}/content/${encodeURIComponent(entryId)}/children`,
 		{ pageSize: 200 },
 	);
-	const existing = children.find(
-		(child) =>
-			child.type === 'file' &&
-			typeof child.name === 'string' &&
-			child.name.toLowerCase() === fileName.toLowerCase(),
+	const files = children.filter((child) => child.type === 'file');
+	const existing = files.find(
+		(child) => typeof child.name === 'string' && child.name.toLowerCase() === fileName.toLowerCase(),
 	);
 
+	if (!existing && ifNoMatch !== 'create') {
+		const existingFiles = files.map((child) => child.name as string);
+		if (ifNoMatch === 'error') {
+			throw new NodeOperationError(
+				this.getNode(),
+				`Entry ${entryId} has no file named "${fileName}" (existing: ${existingFiles.join(', ') || 'none'})`,
+				{ itemIndex: i },
+			);
+		}
+		return { uploadMode: 'skipped', fileName, entryId, existingFiles, targetFileId: null };
+	}
+
+	// read the bytes only once we know they will be sent
+	const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
 	const path = existing
-		? `${roomPath(community, room)}/files/${encodeURIComponent(existing.id as string)}/versions`
-		: `${roomPath(community, room)}/content/${encodeURIComponent(entryId)}/children`;
+		? `${base}/files/${encodeURIComponent(existing.id as string)}/versions`
+		: `${base}/content/${encodeURIComponent(entryId)}/children`;
 
 	const response = await interaxoUploadFile.call(this, path, buffer, fileName, binaryData.mimeType);
 	return {

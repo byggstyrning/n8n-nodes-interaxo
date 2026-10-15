@@ -60,6 +60,29 @@ function statusOf(error: unknown): number | undefined {
 	return raw === undefined ? undefined : Number(raw);
 }
 
+// Room lists change rarely (rooms are created by admins), and callers that pass the
+// root UUID would otherwise pay a 404 plus a list request on every item. Cache per
+// community for a few minutes, per n8n process.
+const ROOM_LIST_TTL_MS = 10 * 60 * 1000;
+const roomListCache = new Map<string, { at: number; rooms: IDataObject[] }>();
+
+async function listRoomsCached(this: InteraxoContext, community: string): Promise<IDataObject[]> {
+	const hit = roomListCache.get(community);
+	if (hit && Date.now() - hit.at < ROOM_LIST_TTL_MS) return hit.rooms;
+	const rooms = (await interaxoRequest.call(
+		this,
+		'GET',
+		`/v1/${encodeURIComponent(community)}/rooms`,
+	)) as IDataObject[];
+	const list = Array.isArray(rooms) ? rooms : [];
+	roomListCache.set(community, { at: Date.now(), rooms: list });
+	return list;
+}
+
+function isUuid(value: string): boolean {
+	return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 /**
  * GET a room by slug, content-root UUID or display name. Content paths accept the
  * root UUID in the {room} position, but `GET /rooms/{room}` itself only accepts the
@@ -70,6 +93,12 @@ export async function getRoom(
 	community: string,
 	room: string,
 ): Promise<IDataObject> {
+	if (isUuid(room)) {
+		const known = roomListCache.get(community)?.rooms.find(
+			(r) => (r.content as IDataObject | undefined)?.root_id === room,
+		);
+		if (known) return known;
+	}
 	try {
 		return (await interaxoRequest.call(this, 'GET', roomPath(community, room))) as IDataObject;
 	} catch (error) {
@@ -79,12 +108,7 @@ export async function getRoom(
 				: new NodeApiError(this.getNode(), error as JsonObject);
 		}
 	}
-	const rooms = (await interaxoRequest.call(
-		this,
-		'GET',
-		`/v1/${encodeURIComponent(community)}/rooms`,
-	)) as IDataObject[];
-	const list = Array.isArray(rooms) ? rooms : [];
+	const list = await listRoomsCached.call(this, community);
 	const rootOf = (r: IDataObject) => (r.content as IDataObject | undefined)?.root_id;
 	const match =
 		list.find((r) => r.id === room || rootOf(r) === room) ?? list.find((r) => r.name === room);
@@ -299,6 +323,7 @@ export interface ResolvedLocation {
 	id: string;
 	type: string;
 	path: string | null;
+	parent_id: string | null;
 	/** Step named by the path (workflow-folder/Step) — restricts results to that step */
 	step: IDataObject | null;
 }
@@ -319,6 +344,7 @@ export async function resolveLocation(
 			id: resolved.item.id as string,
 			type: resolved.item.type as string,
 			path: (resolved.item.path as string | undefined) ?? null,
+			parent_id: (resolved.item.parent_id as string | undefined) ?? null,
 			step: resolved.step,
 		};
 	}
@@ -333,6 +359,7 @@ export async function resolveLocation(
 		id,
 		type: item.type as string,
 		path: (item.path as string | undefined) ?? null,
+		parent_id: (item.parent_id as string | undefined) ?? null,
 		step: null,
 	};
 }

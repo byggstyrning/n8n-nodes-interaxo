@@ -15,3 +15,8 @@ test/.env
 
 # private working notes — never published
 local-notes/
+
+# dev-loop targets (API keys, container names)
+scripts/dev/dev.env
+scripts/dev/backups/
+__pycache__/

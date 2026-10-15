@@ -18,6 +18,15 @@
 - **Rooms given as content-root UUID now work everywhere.** `GET /rooms/{room}` only accepts
   the slug, so Room → Get, Content → Search (no folder) and the new operations fall back to
   matching the room list by slug, root UUID or name.
+- **File → Upload: "Upload To" and "If No File With That Name"** (new options). Upload To =
+  Existing File adds a new version to a given file ID. For uploads to an entry, "If No File With
+  That Name" chooses between adding a new attachment (default, unchanged), skipping
+  (`{uploadMode: "skipped", existingFiles}`) or failing the item.
+- **Clearer API errors.** Interaxo's own `code: message` and field errors are shown instead of
+  n8n's generic "Bad request" text, and the HTTP status is kept on the error.
+- Rooms given as content-root UUID: the room list is cached per community for 10 minutes, so
+  repeated items don't pay a 404 + list request each. File → Find's `location` gains `parent_id`.
+- `scripts/dev/`: Docker-only build/lint, deploy to a test or local n8n, workflow round-trip.
 
 ## 0.1.2
 
