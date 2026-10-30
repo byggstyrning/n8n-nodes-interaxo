@@ -9,6 +9,7 @@ import { communitySelect, returnAllSelect, roomSelect } from '../../shared/descr
 import { findFiles, folderLocator, resolveLocation } from '../../shared/find';
 import {
 	getRlc,
+	getUploadContent,
 	interaxoRequest,
 	interaxoRequestPaged,
 	interaxoUploadFile,
@@ -428,11 +429,11 @@ export async function fileUpload(this: IExecuteFunctions, i: number): Promise<ID
 
 	if (uploadTo === 'file') {
 		const fileId = this.getNodeParameter('uploadFileId', i) as string;
-		const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+		const content = await getUploadContent.call(this, i, binaryPropertyName);
 		const response = await interaxoUploadFile.call(
 			this,
 			`${base}/files/${encodeURIComponent(fileId)}/versions`,
-			buffer,
+			content,
 			fileName,
 			binaryData.mimeType,
 		);
@@ -470,13 +471,13 @@ export async function fileUpload(this: IExecuteFunctions, i: number): Promise<ID
 		return { uploadMode: 'skipped', fileName, entryId, existingFiles, targetFileId: null };
 	}
 
-	// read the bytes only once we know they will be sent
-	const buffer = await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+	// open the bytes only once we know they will be sent
+	const content = await getUploadContent.call(this, i, binaryPropertyName);
 	const path = existing
 		? `${base}/files/${encodeURIComponent(existing.id as string)}/versions`
 		: `${base}/content/${encodeURIComponent(entryId)}/children`;
 
-	const response = await interaxoUploadFile.call(this, path, buffer, fileName, binaryData.mimeType);
+	const response = await interaxoUploadFile.call(this, path, content, fileName, binaryData.mimeType);
 	return {
 		...response,
 		uploadMode: existing ? 'newVersion' : 'newAttachment',

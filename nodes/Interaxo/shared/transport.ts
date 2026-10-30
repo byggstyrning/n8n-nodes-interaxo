@@ -8,7 +8,7 @@ import type {
 	IPollFunctions,
 	JsonObject,
 } from 'n8n-workflow';
-import { NodeApiError } from 'n8n-workflow';
+import { NodeApiError, NodeOperationError } from 'n8n-workflow';
 import { randomBytes } from 'crypto';
 
 export type InteraxoContext =
@@ -184,29 +184,156 @@ export async function resolvePostableFolder(
 	return undefined;
 }
 
-// RFC 7578 header/footer around the file bytes. A single Buffer body is sent as-is
-// by n8n's request helper and axios: measured peak ~2.3x the file above baseline
-// (the caller's buffer, this body, socket write buffers) and nothing retained
-// afterwards. The earlier WHATWG Blob + FormData version peaked at ~3.3x and, on
+type BinaryStream = Awaited<ReturnType<IExecuteFunctions['helpers']['getBinaryStream']>>;
+
+type StreamContent = { size: number; open: () => Promise<BinaryStream> };
+
+/** File bytes for interaxoUploadFile: in memory, or re-readable from n8n's binary store */
+export type UploadContent = Buffer | StreamContent;
+
+/**
+ * The binary property's bytes for an upload. When n8n keeps binary data on disk
+ * (N8N_DEFAULT_BINARY_DATA_MODE=filesystem, ids `filesystem-v2:…`) the upload streams
+ * from that file, so a 400 MB IFC is never held in memory; in-memory, s3 and database
+ * binaries are read into a Buffer as before.
+ */
+export async function getUploadContent(
+	this: IExecuteFunctions,
+	i: number,
+	binaryPropertyName: string,
+): Promise<UploadContent> {
+	const { id } = this.helpers.assertBinaryData(i, binaryPropertyName);
+	if (id?.startsWith('filesystem')) {
+		const { fileSize } = await this.helpers.getBinaryMetadata(id);
+		if (Number.isSafeInteger(fileSize) && fileSize >= 0) {
+			return { size: fileSize, open: async () => await this.helpers.getBinaryStream(id) };
+		}
+	}
+	return await this.helpers.getBinaryDataBuffer(i, binaryPropertyName);
+}
+
+// RFC 7578 header/footer around the file bytes, built by hand because the
+// community-node lint forbids importing form-data or stream. A Buffer body (binaries
+// not on disk) peaks at ~2.3x the file above baseline over plain HTTP and ~3.4x over
+// HTTPS, where TLS queues an encrypted copy of the whole body; a streamed body stays
+// flat. The earlier WHATWG Blob + FormData version peaked higher still and, on
 // Node < 24.20, leaked one full copy of every upload until restart
-// (nodejs/node#63574, Blob.prototype.stream()). Built by hand because the
-// community-node lint forbids importing form-data or stream.
-function multipartFile(buffer: Buffer, fileName: string, mimeType?: string) {
+// (nodejs/node#63574, Blob.prototype.stream()).
+function multipartEnvelope(fileName: string, mimeType?: string) {
 	const boundary = `----n8nInteraxo${randomBytes(16).toString('hex')}`;
 	// Same escaping as the form-data package: quotes and line breaks in the name
 	// would otherwise terminate the header.
 	const safeName = fileName.replace(/"/g, '%22').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
-	const head = Buffer.from(
-		`--${boundary}\r\n` +
-			`Content-Disposition: form-data; name="file"; filename="${safeName}"\r\n` +
-			`Content-Type: ${mimeType || 'application/octet-stream'}\r\n\r\n`,
-		'utf8',
-	);
-	const tail = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
 	return {
-		body: Buffer.concat([head, buffer, tail]),
+		head: Buffer.from(
+			`--${boundary}\r\n` +
+				`Content-Disposition: form-data; name="file"; filename="${safeName}"\r\n` +
+				`Content-Type: ${mimeType || 'application/octet-stream'}\r\n\r\n`,
+			'utf8',
+		),
+		tail: Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8'),
 		contentType: `multipart/form-data; boundary=${boundary}`,
 	};
+}
+
+/**
+ * head + file + tail as one byte stream. It can be sent once: n8n answers a 401 by
+ * refreshing the token and sending the same body object again, and a stream can't be
+ * rewound — that resend is failed at once (instead of a request that waits for bytes
+ * that never come) and reported by `resent()` so the caller can retry with a new stream.
+ */
+async function multipartStream(
+	this: InteraxoContext,
+	content: StreamContent,
+	head: Buffer,
+	tail: Buffer,
+) {
+	const node = this.getNode();
+	const file = await content.open();
+	async function* parts() {
+		yield head;
+		let bytes = 0;
+		for await (const chunk of file as AsyncIterable<Buffer>) {
+			bytes += chunk.length;
+			if (bytes > content.size) break;
+			yield chunk;
+		}
+		// Content-Length was announced from the metadata: a body that disagrees is cut
+		// short, so the request can never complete as a valid upload
+		if (bytes !== content.size) {
+			throw new NodeOperationError(
+				node,
+				`Binary data is ${bytes > content.size ? 'larger' : 'smaller'} than its metadata size (${content.size} bytes)`,
+			);
+		}
+		yield tail;
+	}
+	// fs.ReadStream inherits Readable's static from(); 'stream' itself can't be imported
+	const Readable = file.constructor as unknown as {
+		from(source: AsyncIterable<Buffer>, options: { objectMode: boolean }): BinaryStream;
+	};
+	const stream = Readable.from(parts(), { objectMode: false });
+
+	type Request = { destroy(error?: Error): void; writableFinished: boolean };
+	let request: Request | undefined;
+	let resent = false;
+	const pipe = stream.pipe.bind(stream);
+	stream.pipe = <T extends NodeJS.WritableStream>(destination: T, options?: { end?: boolean }) => {
+		if (!request) {
+			request = destination as unknown as Request;
+			return pipe(destination, options);
+		}
+		resent = true;
+		(destination as unknown as Request).destroy(new Error('Upload stream was already sent'));
+		return destination;
+	};
+	return {
+		stream,
+		resent: () => resent,
+		// After an error response the request may still be half-sent and the file open
+		destroy: () => {
+			stream.destroy();
+			file.destroy();
+			if (request && !request.writableFinished) request.destroy();
+		},
+	};
+}
+
+async function postMultipartStream(
+	this: InteraxoContext,
+	path: string,
+	content: StreamContent,
+	envelope: { head: Buffer; tail: Buffer; contentType: string },
+): Promise<unknown> {
+	const { head, tail, contentType } = envelope;
+	for (let attempt = 1; ; attempt++) {
+		const body = await multipartStream.call(this, content, head, tail);
+		try {
+			return await interaxoRequest.call(this, 'POST', path, {
+				body: body.stream,
+				option: {
+					json: false,
+					headers: {
+						Accept: 'application/json',
+						'Content-Type': contentType,
+						'Content-Length': String(head.length + content.size + tail.length),
+					},
+					timeout: 300_000,
+					// axios' default transport (follow-redirects) keeps every body chunk until
+					// the response, to replay it on a redirect: a full copy of the file
+					disableFollowRedirect: true,
+				},
+			});
+		} catch (error) {
+			// one retry, with a new stream and the token n8n just refreshed
+			if (attempt === 1 && body.resent()) continue;
+			throw error instanceof NodeApiError
+				? error
+				: new NodeApiError(this.getNode(), error as JsonObject);
+		} finally {
+			body.destroy();
+		}
+	}
 }
 
 /**
@@ -216,20 +343,23 @@ function multipartFile(buffer: Buffer, fileName: string, mimeType?: string) {
 export async function interaxoUploadFile(
 	this: InteraxoContext,
 	path: string,
-	buffer: Buffer,
+	content: UploadContent,
 	fileName: string,
 	mimeType?: string,
 ): Promise<IDataObject> {
-	const { body, contentType } = multipartFile(buffer, fileName, mimeType);
+	const envelope = multipartEnvelope(fileName, mimeType);
+	const { head, tail, contentType } = envelope;
 
-	const response = await interaxoRequest.call(this, 'POST', path, {
-		body,
-		option: {
-			json: false,
-			headers: { Accept: 'application/json', 'Content-Type': contentType },
-			timeout: 300_000,
-		},
-	});
+	const response = Buffer.isBuffer(content)
+		? await interaxoRequest.call(this, 'POST', path, {
+				body: Buffer.concat([head, content, tail]),
+				option: {
+					json: false,
+					headers: { Accept: 'application/json', 'Content-Type': contentType },
+					timeout: 300_000,
+				},
+			})
+		: await postMultipartStream.call(this, path, content, envelope);
 
 	if (typeof response === 'string' && response.length > 0) {
 		try {

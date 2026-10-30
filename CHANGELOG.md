@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.4
+
+- **File → Upload streams large files instead of loading them into memory.** When n8n keeps
+  binary data on disk (`N8N_DEFAULT_BINARY_DATA_MODE=filesystem`, the default for regular
+  installs) the multipart body is streamed from that file with a known Content-Length, and
+  axios' redirect-replay buffer is turned off for that request. Measured on n8n 2.8.3 with a
+  375 MiB IFC over HTTPS: peak RSS +31 MB instead of +1336 MB; upload time unchanged. Binaries
+  not on disk (in-memory, S3, database) still go through the Buffer path. Wire format,
+  create-vs-version logic and output fields are unchanged.
+- A 401 during a streamed upload (expired token) is retried once with a fresh stream after
+  n8n refreshes the token, instead of n8n resending an already-consumed stream. If the file on
+  disk disagrees with its recorded size, the upload fails before it can complete.
+
 ## 0.1.3
 
 - **File → Find** (new): find files below a folder, a path, a workflow step or an entry by
