@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-interaxo",
-	"version": "0.1.3",
+	"version": "0.1.4",
 	"description": "n8n community nodes for Interaxo (Tribia) — rooms, folders, documents, revisions and workflow steps",
 	"license": "MIT",
 	"homepage": "https://github.com/byggstyrning/n8n-nodes-interaxo",

@@ -77,6 +77,10 @@ A few Interaxo behaviors worth knowing:
   initial step — plan flows accordingly.
 - **Upload semantics:** uploads target an *entry*; a case-insensitive file-name match against
   existing attachments decides between "new version" and "new attachment".
+- **Large uploads:** when n8n stores binary data on disk (`filesystem` mode, the default for
+  regular installs) the file is streamed from there, so memory stays flat whatever the file
+  size. In-memory, S3 and database binaries are read into memory first (about 2–3.5x the file
+  size at peak).
 - **Search:** a 404 from a search below an empty folder is returned as an empty result, not
   an error.
 - **Name matching:** the API's own `name` filter is loose (prefix-like and fuzzier than that —
